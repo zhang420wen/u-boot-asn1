@@ -6,10 +6,12 @@
 
 #include <common.h>
 #include <cpu_func.h>
+#include "asn2fdt.h"
 
 int board_init(void)
 {
 	enable_caches();
+	asn2fdt_test();
 
 	return 0;
 }

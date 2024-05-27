@@ -156,6 +156,30 @@ int disable_interrupts(void)
 	return 0;
 }
 
+/*
+ * Parse instructions and check if it is the target CSR
+ */
+static int decode_csr_instruction(uint32_t instr, uint32_t csr_addr) {
+	uint32_t opcode = instr & 0x7F;
+	uint32_t funct3 = (instr >> 12) & 0x7;
+	uint32_t imm_csr = (instr & IMM_CSR_MASK) >> IMM_CSR_SHIFT; 
+
+	/* check the funcode is or not, And immediately check if the CSR address in 
+	the numeric field matches our expected CSR address*/
+	if (opcode == OPCODE_SYSTEM && imm_csr == csr_addr) {
+		switch (funct3) {
+			case 0b001: // CSRRW
+			case 0b010: // CSRRS
+			case 0b011: // CSRRC
+			case 0b101: // CSRRWI
+			case 0b110: // CSRRSI
+			case 0b111: // CSRRCI
+			return 1;
+		}
+	}
+	return 0;
+}
+
 ulong handle_trap(ulong cause, ulong epc, ulong tval, struct pt_regs *regs)
 {
 	ulong is_irq, irq;
@@ -204,7 +228,24 @@ ulong handle_trap(ulong cause, ulong epc, ulong tval, struct pt_regs *regs)
 			break;
 		};
 	} else {
-		_exit_trap(cause, epc, tval, regs);
+		debug("[%s,%d]\n", __func__, __LINE__);
+		if (exception_code == CAUSE_ILLEGAL_INSTRUCTION) {
+			debug("[%s,%d]\n", __func__, __LINE__);
+			uint32_t instr = *((uint32_t*)epc);
+			/* Parse instructions to determine the CSR being attempted to access 
+			   (requires implementation of decode_csr_instruction)*/
+			if (decode_csr_instruction(instr, CSR_MCONFIGPTR)) {
+				debug("[%s,%d]\n", __func__, __LINE__);
+				regs->a0 = 0x20000000;
+				epc += 4;
+				debug("a0:%lx\n", regs->a0);
+			} else {
+				_exit_trap(cause, epc, regs);
+				return epc;
+			}
+		} else {
+			_exit_trap(cause, epc, regs);
+		}
 	}
 
 	return epc;
